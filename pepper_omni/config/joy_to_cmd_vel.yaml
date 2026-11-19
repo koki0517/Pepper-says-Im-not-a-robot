@@ -1,0 +1,18 @@
+joy_to_cmd_vel:
+  ros__parameters:
+    # /spacenav/joy axes (0-based index), each in [-1, +1]
+    #   axes[2] -> Pepper X (forward +)
+    #   axes[1] -> Pepper Y (left +)
+    #   axes[3] -> Pepper yaw (CCW +)
+    axis_linear_x: 2
+    axis_linear_y: 1
+    axis_angular_z: 3
+    sign_linear_x: 1.0
+    sign_linear_y: 1.0
+    sign_angular_z: 1.0
+    # joy = +/-1 maps to these velocities
+    max_linear_x: 0.3    # m/s
+    max_linear_y: 0.3    # m/s
+    max_angular_z: 1.0   # rad/s
+    deadzone: 0.1
+    timeout: 0.5         # s

@@ -1,0 +1,16 @@
+omni_driver:
+  ros__parameters:
+    port_name: /dev/ttyUSB0
+    baud_rate: 1000000
+    # Wheel mount angle from X+ (forward) toward Y+ (left), degrees.
+    # ID3 = front-right, ID1 = rear, ID2 = front-left.
+    wheel_ids:        [3,     1,     2]
+    wheel_angles_deg: [-60.0, 180.0, 60.0]
+    # -1.0: horn faces outward. Verified on hardware (X, Y, yaw) 2026-11-19.
+    motor_directions: [-1.0, -1.0, -1.0]
+    wheel_radius: 0.05   # m   (diameter 10 cm)
+    base_radius: 0.12    # m   base center to wheel contact
+    # Moving Speed register limit (unit 0.114 rpm). 400 = 45.6 rpm
+    max_speed_value: 400
+    cmd_timeout: 0.5     # s, stop wheels if cmd_vel stops
+    control_rate: 50.0   # Hz
