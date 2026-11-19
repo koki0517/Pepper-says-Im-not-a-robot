@@ -1,0 +1,38 @@
+omni_driver:
+  ros__parameters:
+    port_name: /dev/ttyUSB0
+    baud_rate: 1000000
+    # Wheel mount angle from X+ (forward) toward Y+ (left), degrees.
+    # ID3 = front-right, ID1 = rear, ID2 = front-left.
+    wheel_ids:        [3,     1,     2]
+    wheel_angles_deg: [-60.0, 180.0, 60.0]
+    # -1.0: horn faces outward. Verified on hardware (X, Y, yaw) 2026-11-19.
+    motor_directions: [-1.0, -1.0, -1.0]
+    wheel_radius: 0.05   # m   (diameter 10 cm)
+    base_radius: 0.12    # m   base center to wheel contact
+    # Moving Speed register limit (unit 0.114 rpm). 400 = 45.6 rpm
+    max_speed_value: 400
+    cmd_timeout: 0.5     # s, stop wheels if cmd_vel stops
+    control_rate: 50.0   # Hz
+
+    # --- Neck (RX-28, wheel mode): keep head facing a fixed world heading ---
+    neck_enabled: true
+    neck_id: 4
+    # +1.0: neck motor CCW (position increasing) turns head CCW seen from above.
+    neck_direction: 1.0          # verified on hardware
+    neck_kp: 3.0                 # 1/s, P gain on heading error
+    neck_deadband_deg: 2.0       # no P correction inside this error
+    neck_max_speed_value: 500    # register limit (~150 deg/s, > base max yaw 2 rad/s)
+    # Measured 2026-11-19 @ 12.4 V: deg/s = 0.335 * (|value| - 48)
+    neck_rpm_per_unit: 0.0558    # slope above the offset
+    neck_offset_value: 48.0      # static friction: below this the neck barely moves
+    neck_min_rate_deg: 1.0       # deg/s, send 0 below this
+    neck_tolerance_deg: 30.0     # reject position readings this far from prediction
+
+    # --- Arm (RX-28, joint mode): goal angle from /arm_goal_deg ---
+    arm_enabled: true
+    arm_id: 5
+    arm_min_deg: 58.0            # also clamped to the servo's CW/CCW angle limits
+    arm_max_deg: 158.0
+    arm_moving_speed: 300        # ~33 rpm (0 = max speed, uncontrolled)
+    arm_release_on_exit: false   # keep holding so the arm does not drop
