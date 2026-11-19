@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>人間確認</title>
+<style>
+  :root {
+    --bg: #eef1f5; --card: #fff; --line: #d3d8df; --text: #1f2933; --sub: #6b7682;
+    --accent: #2f6fdb; --ok: #1e9e5a; --ng: #c62828;
+    --pw: min(440px, calc(100vh - 230px), calc(100vw - 32px));  /* パネル幅 */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none; overflow: hidden;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+  img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
+
+  /* --- チェックボックス --- */
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+  .headline { font-size: 22px; color: var(--sub); margin: 0; }
+  .widget {
+    width: 460px; height: 110px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.08);
+    display: flex; align-items: center; padding: 0 20px; gap: 18px;
+  }
+  .box {
+    width: 44px; height: 44px; flex: none; border: 3px solid #b9c0c8; border-radius: 4px;
+    background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .box.spin { border: 4px solid #cfe0fb; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  .box.done { border: none; }
+  .box svg { display: none; }
+  .box.done svg { display: block; }
+  .box.done svg path { stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw .35s ease-out forwards; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .label { font-size: 20px; flex: 1; white-space: nowrap; }
+  .brand { text-align: center; color: var(--sub); font-size: 11px; line-height: 1.3; }
+  .brand svg { width: 36px; height: 36px; display: block; margin: 0 auto 2px; }
+
+  /* --- チャレンジ共通 --- */
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(20,25,30,.35); }
+  .overlay.show { display: flex; }
+  .panel { width: var(--pw); background: var(--card); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,.25); padding: 10px; }
+  .prompt { background: var(--accent); color: #fff; padding: 14px 18px; border-radius: 3px; }
+  .prompt small { display: block; font-size: 14px; opacity: .92; }
+  .prompt b { display: block; font-size: 26px; margin: 2px 0; }
+  .body { margin: 10px 0; position: relative; }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); min-height: 62px; }
+  .err { color: var(--ng); font-size: 15px; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 3px; font-weight: bold; font-size: 18px; font-family: inherit; padding: 14px 30px; cursor: pointer; }
+  .btn:active { filter: brightness(.9); }
+
+  /* --- 画像タイル --- */
+  .grid { display: grid; gap: 4px; }
+  .grid.g3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.g2 { grid-template-columns: repeat(2, 1fr); }
+  .tile { aspect-ratio: 1; position: relative; cursor: pointer; overflow: hidden; background: #dde2e8; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .12s, opacity .6s; }
+  .tile.on img { transform: scale(.82); }
+  .tile.on::after {
+    content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/70% no-repeat;
+  }
+  .tile.fade img { opacity: 0; }
+
+  /* --- スライダーパズル --- */
+  .puzzle { position: relative; width: 100%; aspect-ratio: 8 / 5; overflow: hidden; background-repeat: no-repeat; }
+  .hole, .piece { position: absolute; width: 20%; aspect-ratio: 1; border-radius: 6px; background-repeat: no-repeat; }
+  .hole { background: rgba(0,0,0,.55); box-shadow: inset 0 0 0 2px rgba(255,255,255,.8); }
+  .piece { box-shadow: 0 0 0 2px #fff, 0 3px 10px rgba(0,0,0,.6); }
+  .track { position: relative; height: 56px; margin-top: 10px; background: #e7ebf0; border-radius: 28px; }
+  .track span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--sub); font-size: 15px; }
+  .knob { position: absolute; top: 0; left: 0; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); cursor: grab; display: flex; align-items: center; justify-content: center; }
+  .knob svg { width: 26px; height: 26px; }
+
+  /* --- 結果 --- */
+  .msg { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: var(--bg); z-index: 10; }
+  .msg.show { display: flex; animation: pop .4s ease-out; }
+  .msg h1 { font-size: 42px; margin: 0 0 8px; }
+  .msg p { font-size: 20px; margin: 0; color: var(--sub); }
+  #ok h1 { color: var(--ok); } #ng h1 { color: var(--ng); }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .tap { position: fixed; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%; border: 2px solid #e53935; pointer-events: none; animation: fade 1.5s forwards; z-index: 99; }
+  .coord { position: fixed; left: 8px; bottom: 8px; font: 13px monospace; color: #e53935; z-index: 99; }
+  @keyframes fade { to { opacity: 0; transform: scale(2); } }
+</style>
+<script src="images/manifest.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <p class="headline">続行するには確認してください</p>
+  <div class="widget">
+    <div class="box" id="box">
+      <svg width="44" height="44" viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" fill="none" stroke="#1e9e5a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="label">私はロボットではありません</div>
+    <div class="brand">
+      <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#9aa5b1" stroke-width="3"/><circle cx="18" cy="14" r="4.5" fill="#9aa5b1"/><path d="M9.5 27c1.8-5 5-7 8.5-7s6.7 2 8.5 7" fill="#9aa5b1"/></svg>
+      HumanCheck
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <div class="prompt" id="prompt"></div>
+    <div class="body" id="body"></div>
+    <div class="foot"><span class="err" id="err"></span><button class="btn" id="verify">確認</button></div>
+  </div>
+</div>
+
+<div class="msg" id="ok"><h1>確認できました</h1><p>あなたは人間です。たぶん。</p></div>
+<div class="msg" id="ng"><h1>認証に失敗しました</h1><p>ロボットの疑いがあります。</p></div>
+
+<script>
+/* ===== 設定 =====
+   settings.html(別タブ)で変更できる。定義と既定値は config.js。
+   URLパラメータでも指定でき、その場合は設定タブより優先される:
+   ?pass=0.15  ?p=0.45  ?max=5  ?types=select,single,slider(,dynamic)
+   ?reset=8  ?lock=2  ?tol=0.03  ?debug=1                                   */
+const { cfg } = CAPTCHA_CONFIG.resolve(location.search);
+const PASS = cfg.pass, P_ROUND = cfg.p, MAX = cfg.max, RESET_SEC = cfg.reset;
+const LOCK_SEC = cfg.lock, TOL = cfg.tol, TYPES = cfg.types, DEBUG = cfg.debug;
+
+const NAME = { robot: 'ロボット', car: '車', bus: 'バス', bicycle: '自転車', traffic_light: '信号機',
+               crosswalk: '横断歩道', hydrant: '消火栓', stairs: '階段' };
+const CATS = Object.keys(PHOTOS);
+
+const $ = id => document.getElementById(id);
+const rnd = n => Math.random() * n | 0;
+const pick = a => a[rnd(a.length)];
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const src = f => 'images/' + f;
+
+let round = 0, busy = false, timer = null, judge = null;
+
+/* 同じ写真が1問の中で重ならないように配る */
+function dealer() {
+  const used = new Set();
+  return cat => {
+    const pool = PHOTOS[cat].filter(f => !used.has(f));
+    const f = pick(pool.length ? pool : PHOTOS[cat]);
+    used.add(f); return f;
+  };
+}
+function otherCat(t) { return pick(CATS.filter(c => c !== t)); }
+
+function tile(file, cat) {
+  const d = document.createElement('div');
+  d.className = 'tile'; d.dataset.cat = cat;
+  d.innerHTML = `<img src="${src(file)}" alt="">`;
+  return d;
+}
+
+/* ===== 問題の種類 ===== */
+const CHALLENGES = {
+  // 3x3 から該当する写真をすべて選ぶ
+  select() {
+    const t = pick(CATS), deal = dealer(), n = 2 + rnd(3);
+    const cats = shuffle([...Array(n).fill(t), ...Array(9 - n).fill(0).map(() => otherCat(t))]);
+    setPrompt('次の画像をすべて選択してください', NAME[t], '選び終わったら［確認］を押してください');
+    const g = grid(3);
+    cats.forEach(c => { const d = tile(deal(c), c); d.onclick = () => d.classList.toggle('on'); g.appendChild(d); });
+    showVerify(true);
+    judge = () => [...g.children].every(d => d.classList.contains('on') === (d.dataset.cat === t));
+  },
+  // 選んだ写真が消えて新しい写真に入れ替わる。該当がなくなるまで選ぶ
+  dynamic() {
+    const t = pick(CATS), deal = dealer();
+    let extra = 1 + rnd(3);   // 入れ替えで追加で出てくる正解の数
+    const n = 2 + rnd(2);
+    const cats = shuffle([...Array(n).fill(t), ...Array(9 - n).fill(0).map(() => otherCat(t))]);
+    setPrompt(NAME[t] + 'の画像をすべて選択してください', NAME[t], '新しい画像が表示されます。該当する画像がなくなったら［確認］を押してください');
+    const g = grid(3);
+    cats.forEach(c => {
+      const d = tile(deal(c), c);
+      d.onclick = () => {
+        if (d.classList.contains('fade')) return;
+        if (d.dataset.cat !== t) d.dataset.wrong = '1';   // 関係ない画像を選んだら記録
+        d.classList.add('fade');
+        setTimeout(() => {
+          const c2 = (extra > 0 && Math.random() < 0.4) ? (extra--, t) : otherCat(t);
+          d.dataset.cat = c2;
+          const img = d.querySelector('img');
+          img.onload = () => d.classList.remove('fade');
+          img.src = src(deal(c2));
+        }, 700);
+      };
+      g.appendChild(d);
+    });
+    showVerify(true);
+    judge = () => ![...g.children].some(d => d.dataset.cat === t || d.dataset.wrong);
+  },
+  // 2x2 から1枚だけ選ぶ(タップした時点で判定)
+  single() {
+    const t = pick(CATS), deal = dealer();
+    const cats = shuffle([t, ...shuffle(CATS.filter(c => c !== t)).slice(0, 3)]);
+    setPrompt('次の画像を1枚選択してください', NAME[t], '');
+    const g = grid(2);
+    cats.forEach(c => { const d = tile(deal(c), c); d.onclick = () => submit(c === t); g.appendChild(d); });
+    showVerify(false);
+  },
+  // スライダーを動かしてピースを穴に合わせる
+  slider() {
+    const file = pick(PHOTOS[pick(CATS)]);
+    setPrompt('パズルを完成させてください', 'スライダーを右に動かす', 'ピースを穴の位置に合わせてください');
+    const body = $('body');
+    body.innerHTML = `<div class="puzzle" style="background-image:url('${src(file)}')"><div class="hole"></div><div class="piece"></div></div>
+      <div class="track"><span>→ スライドしてください</span><div class="knob"><svg viewBox="0 0 24 24"><path d="M5 12h12M12 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>`;
+    const pz = body.querySelector('.puzzle'), hole = body.querySelector('.hole'), piece = body.querySelector('.piece');
+    const track = body.querySelector('.track'), knob = body.querySelector('.knob');
+    // 正方形の写真を幅いっぱいに置き、上下を切って横長に見せる
+    const W = pz.clientWidth, H = pz.clientHeight, P = W * 0.2, oy = (W - H) / 2;
+    const hx = P * 1.5 + Math.random() * (W - P * 2.5), hy = H * 0.1 + Math.random() * (H * 0.8 - P);
+    pz.style.backgroundSize = `${W}px ${W}px`;
+    pz.style.backgroundPosition = `0 ${-oy}px`;
+    Object.assign(hole.style, { left: hx + 'px', top: hy + 'px' });
+    Object.assign(piece.style, { left: '0px', top: hy + 'px', backgroundImage: `url('${src(file)}')`,
+                                 backgroundSize: `${W}px ${W}px`, backgroundPosition: `${-hx}px ${-hy - oy}px` });
+    const maxK = track.clientWidth - knob.clientWidth, maxP = W - P;
+    let x0 = null, k = 0;
+    knob.onpointerdown = e => { x0 = e.clientX - k; knob.setPointerCapture(e.pointerId); };
+    knob.onpointermove = e => {
+      if (x0 === null) return;
+      k = Math.max(0, Math.min(maxK, e.clientX - x0));
+      knob.style.left = k + 'px';
+      piece.style.left = (k / maxK * maxP) + 'px';
+    };
+    knob.onpointerup = knob.onpointercancel = () => {
+      if (x0 === null) return;
+      x0 = null;
+      if (k < 4) return;   // ほとんど動かしていなければ判定しない
+      submit(Math.abs(k / maxK * maxP - hx) < W * TOL);
+    };
+    showVerify(false);
+  },
+};
+
+function setPrompt(small, big, hint) {
+  $('prompt').innerHTML = `<small>${small}</small><b>${big}</b>${hint ? `<small>${hint}</small>` : ''}`;
+}
+function grid(n) {
+  const g = document.createElement('div');
+  g.className = 'grid g' + n;
+  $('body').innerHTML = ''; $('body').appendChild(g);
+  return g;
+}
+function showVerify(v) { $('verify').style.visibility = v ? 'visible' : 'hidden'; }
+
+/* ===== 進行 ===== */
+function nextChallenge(message) {
+  round++;
+  judge = null;
+  $('overlay').classList.add('show');
+  CHALLENGES[pick(TYPES)]();
+  $('err').textContent = message || '';
+}
+
+function submit(correct) {
+  if (busy) return;
+  if (correct && (round >= MAX || Math.random() < P_ROUND)) return success();
+  if (round >= MAX) return fail();
+  busy = true;
+  setTimeout(() => {
+    busy = false;
+    nextChallenge(correct ? '追加の確認が必要です' : 'もう一度お試しください');
+  }, 400);
+}
+$('verify').onclick = () => judge && submit(judge());
+
+function success() {
+  $('overlay').classList.remove('show');
+  $('box').className = 'box done';
+  setTimeout(() => show('ok'), 1200);
+}
+function fail() {
+  $('overlay').classList.remove('show');
+  show('ng');
+}
+let shownAt = 0;
+function show(id) {
+  shownAt = Date.now();
+  $(id).classList.add('show');
+  if (RESET_SEC > 0) timer = setTimeout(reset, RESET_SEC * 1000);
+}
+function reset() {
+  if (pendingReload) return location.reload();   // 設定タブで変更があった
+  clearTimeout(timer);
+  round = 0; busy = false;
+  $('box').className = 'box';
+  ['ok', 'ng'].forEach(id => $(id).classList.remove('show'));
+  $('overlay').classList.remove('show');
+}
+
+$('box').onclick = () => {
+  if ($('box').className !== 'box') return;
+  $('box').className = 'box spin';
+  setTimeout(() => Math.random() < PASS ? success() : nextChallenge(), 1000);
+};
+// 結果画面は表示直後のタップでは戻らない(ペンが触れたままでも結果を見せるため)
+['ok', 'ng'].forEach(id => $(id).onclick = () => {
+  if (Date.now() - shownAt >= LOCK_SEC * 1000) reset();
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// 設定タブで変更されたら反映する。最初の画面で待機中ならすぐ、
+// 問題の途中なら最初の画面に戻ったときに読み込み直す。
+let pendingReload = false;
+const idle = () => $('box').className === 'box' && !$('overlay').classList.contains('show');
+addEventListener('storage', e => {
+  if (e.key !== CAPTCHA_CONFIG.KEY && e.key !== null) return;
+  if (idle()) location.reload(); else pendingReload = true;
+});
+
+// 写真を先読みしておく(切り替え時のちらつき防止)
+Object.values(PHOTOS).flat().forEach(f => { new Image().src = src(f); });
+
+if (DEBUG) {
+  const c = document.createElement('div'); c.className = 'coord'; document.body.appendChild(c);
+  const info = () => c.textContent = `${innerWidth}x${innerHeight}  round ${round}/${MAX}`;
+  info(); addEventListener('resize', info);
+  document.addEventListener('pointerdown', e => {
+    const d = document.createElement('div'); d.className = 'tap';
+    d.style.left = e.clientX + 'px'; d.style.top = e.clientY + 'px';
+    document.body.appendChild(d); setTimeout(() => d.remove(), 1500);
+    c.textContent = `${innerWidth}x${innerHeight}  round ${round}/${MAX}  tap (${Math.round(e.clientX)}, ${Math.round(e.clientY)})`;
+  });
+}
+</script>
+</body>
+</html>
