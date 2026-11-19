@@ -10,15 +10,16 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(dynamixel_sdk REQUIRED)
 
 add_executable(joy_to_cmd_vel src/joy_to_cmd_vel.cpp)
 target_compile_features(joy_to_cmd_vel PUBLIC cxx_std_17)
-ament_target_dependencies(joy_to_cmd_vel rclcpp sensor_msgs geometry_msgs)
+ament_target_dependencies(joy_to_cmd_vel rclcpp sensor_msgs geometry_msgs std_msgs)
 
 add_executable(omni_driver src/omni_driver.cpp)
 target_compile_features(omni_driver PUBLIC cxx_std_17)
-ament_target_dependencies(omni_driver rclcpp geometry_msgs dynamixel_sdk)
+ament_target_dependencies(omni_driver rclcpp geometry_msgs std_msgs dynamixel_sdk)
 
 install(TARGETS joy_to_cmd_vel omni_driver
   DESTINATION lib/${PROJECT_NAME}

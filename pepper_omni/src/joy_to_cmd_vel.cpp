@@ -2,6 +2,9 @@
 //
 // Pepper base frame: X+ forward, Y+ left, Z+ up (right-handed).
 // angular.z is positive counter-clockwise when viewed from above.
+//
+// Also publishes head_turn_rate (std_msgs/Float64, rad/s, CCW +) from the
+// left/right buttons, used by omni_driver to rotate the locked head heading.
 
 #include <algorithm>
 #include <chrono>
@@ -11,6 +14,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
+#include "std_msgs/msg/float64.hpp"
 
 using namespace std::chrono_literals;
 
@@ -36,7 +40,20 @@ public:
     deadzone_ = declare_parameter<double>("deadzone", 0.1);
     timeout_ = declare_parameter<double>("timeout", 0.5);         // s
 
+    // Head heading buttons: while held, rotate the locked head heading.
+    button_head_left_ = declare_parameter<int>("button_head_left", 0);    // CCW
+    button_head_right_ = declare_parameter<int>("button_head_right", 1);  // CW
+    head_turn_rate_ = declare_parameter<double>("head_turn_rate_deg", 90.0) * M_PI / 180.0;
+
+    // Arm: servo angle = center + gain * axis (absolute, not integrated).
+    // Forward tilt -> axis -1 -> center + 50 deg with gain -50.
+    axis_arm_ = declare_parameter<int>("axis_arm", 4);
+    arm_center_deg_ = declare_parameter<double>("arm_center_deg", 108.0);
+    arm_gain_deg_ = declare_parameter<double>("arm_gain_deg", -50.0);
+
     pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    head_pub_ = create_publisher<std_msgs::msg::Float64>("head_turn_rate", 10);
+    arm_pub_ = create_publisher<std_msgs::msg::Float64>("arm_goal_deg", 10);
     sub_ = create_subscription<sensor_msgs::msg::Joy>(
       "joy", 10, std::bind(&JoyToCmdVel::onJoy, this, std::placeholders::_1));
     watchdog_ = create_wall_timer(100ms, std::bind(&JoyToCmdVel::onWatchdog, this));
@@ -68,6 +85,26 @@ private:
     twist.linear.y = sign_y_ * max_y_ * shape(*joy, axis_y_);
     twist.angular.z = sign_yaw_ * max_yaw_ * shape(*joy, axis_yaw_);
     pub_->publish(twist);
+
+    std_msgs::msg::Float64 head;
+    head.data = head_turn_rate_ *
+      (pressed(*joy, button_head_left_) - pressed(*joy, button_head_right_));
+    head_pub_->publish(head);
+
+    if (axis_arm_ >= 0 && axis_arm_ < static_cast<int>(joy->axes.size())) {
+      std_msgs::msg::Float64 arm;
+      arm.data = arm_center_deg_ +
+        arm_gain_deg_ * std::clamp(static_cast<double>(joy->axes[axis_arm_]), -1.0, 1.0);
+      arm_pub_->publish(arm);
+    }
+  }
+
+  static int pressed(const sensor_msgs::msg::Joy & joy, int button)
+  {
+    if (button < 0 || button >= static_cast<int>(joy.buttons.size())) {
+      return 0;
+    }
+    return joy.buttons[button] ? 1 : 0;
   }
 
   // Publish zero once if joy input stops arriving.
@@ -79,6 +116,7 @@ private:
     if ((now() - last_joy_time_).seconds() > timeout_) {
       RCLCPP_WARN(get_logger(), "joy timeout: publishing zero velocity");
       pub_->publish(geometry_msgs::msg::Twist());
+      head_pub_->publish(std_msgs::msg::Float64());
       stopped_ = true;
     }
   }
@@ -87,8 +125,14 @@ private:
   double sign_x_, sign_y_, sign_yaw_;
   double max_x_, max_y_, max_yaw_;
   double deadzone_, timeout_;
+  int button_head_left_, button_head_right_;
+  double head_turn_rate_;
+  int axis_arm_;
+  double arm_center_deg_, arm_gain_deg_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr arm_pub_;
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr head_pub_;
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr sub_;
   rclcpp::TimerBase::SharedPtr watchdog_;
   rclcpp::Time last_joy_time_;
