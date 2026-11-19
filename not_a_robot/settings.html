@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>認証の設定</title>
+<style>
+  :root {
+    --bg: #eef1f5; --card: #fff; --line: #d3d8df; --text: #1f2933; --sub: #6b7682;
+    --accent: #2f6fdb; --ok: #1e9e5a; --warn: #b26a00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--sub); font-size: 14px; margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 20px; }
+  .row { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row > label, .row > .name { display: block; font-weight: bold; font-size: 15px; }
+  .hint { color: var(--sub); font-size: 13px; margin-top: 2px; }
+  .ctl { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .ctl input[type=range] { flex: 1; accent-color: var(--accent); }
+  .ctl input[type=number] { width: 90px; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; }
+  .unit { color: var(--sub); font-size: 14px; min-width: 1.5em; }
+  .check { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 15px; }
+  .check input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .changed { color: var(--accent); font-size: 12px; margin-left: 6px; font-weight: normal; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+  .btn { font: inherit; font-weight: bold; padding: 10px 20px; border-radius: 4px; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--text); text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .status { font-size: 14px; color: var(--ok); }
+  .status.err { color: var(--warn); }
+  .note { margin-top: 20px; font-size: 13px; color: var(--sub); line-height: 1.6; }
+  code { background: #e3e7ec; padding: 1px 5px; border-radius: 3px; }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<main>
+  <h1>認証の設定</h1>
+  <p class="lead">変更はすぐ保存されます。認証画面は、待機中ならすぐに、問題の途中なら最初の画面に戻ったときに反映されます。</p>
+
+  <div class="card" id="form"></div>
+
+  <div class="bar">
+    <a class="btn primary" href="captcha.html" target="captcha">認証画面を開く</a>
+    <button class="btn" id="defaults">既定値に戻す</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <p class="note">
+    認証画面の URL にパラメータ（例: <code>captcha.html?pass=0.5</code>）を付けた場合は、
+    その項目だけ URL の値が優先され、ここでの設定は効きません。<br>
+    設定はこのブラウザにだけ保存されます。認証画面と同じブラウザで開いてください。
+  </p>
+</main>
+
+<script>
+const C = CAPTCHA_CONFIG;
+const $ = id => document.getElementById(id);
+let values = Object.assign(C.defaults(), C.loadSaved());
+
+function persist() {
+  const ok = C.save(values);
+  $('status').className = 'status' + (ok ? '' : ' err');
+  $('status').textContent = ok ? '保存しました' : '保存できませんでした（ブラウザの保存が無効です）';
+  clearTimeout(persist.t);
+  persist.t = setTimeout(() => $('status').textContent = '', 1500);
+  markChanged();
+}
+
+function markChanged() {
+  for (const f of C.FIELDS) {
+    const tag = document.querySelector(`[data-changed="${f.key}"]`);
+    tag.textContent = JSON.stringify(values[f.key]) === JSON.stringify(f.def) ? '' : '変更あり';
+  }
+}
+
+// 確率と割合は % で表示する
+function numberRow(f) {
+  const pct = f.type === 'prob';
+  const min = pct ? 0 : f.min, max = pct ? (f.max ?? 1) * 100 : f.max;
+  const step = pct ? (f.step ?? 0.01) * 100 : (f.step ?? 1);
+  const toView = v => pct ? +(v * 100).toFixed(1) : v;
+  const fromView = v => pct ? v / 100 : v;
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <label for="n-${f.key}">${f.label}<span class="changed" data-changed="${f.key}"></span></label>
+    ${f.hint ? `<div class="hint">${f.hint}</div>` : ''}
+    <div class="ctl">
+      <input type="range" id="r-${f.key}" min="${min}" max="${max}" step="${step}">
+      <input type="number" id="n-${f.key}" min="${min}" max="${max}" step="${step}">
+      <span class="unit">${pct ? '%' : (f.key === 'max' ? '回' : '秒')}</span>
+    </div>`;
+  const r = row.querySelector('input[type=range]'), n = row.querySelector('input[type=number]');
+  const set = v => {
+    const x = Math.min(max, Math.max(min, Number(v)));
+    if (Number.isNaN(x)) return;
+    r.value = n.value = x;
+    values[f.key] = fromView(x);
+    persist();
+  };
+  r.value = n.value = toView(values[f.key]);
+  r.oninput = () => set(r.value);
+  n.onchange = () => set(n.value);
+  return row;
+}
+
+function typesRow(f) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name">${f.label}<span class="changed" data-changed="${f.key}"></span></div>
+    <div class="hint">1つ以上選んでください</div>`;
+  for (const t of C.TYPES) {
+    const l = document.createElement('label');
+    l.className = 'check';
+    l.innerHTML = `<input type="checkbox" value="${t.key}"> ${t.label}`;
+    const cb = l.querySelector('input');
+    cb.checked = values.types.includes(t.key);
+    cb.onchange = () => {
+      const next = [...row.querySelectorAll('input:checked')].map(x => x.value);
+      if (!next.length) { cb.checked = true; return; }   // 0 個にはしない
+      values.types = next;
+      persist();
+    };
+    row.appendChild(l);
+  }
+  return row;
+}
+
+function boolRow(f) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<label class="check" style="margin:0;font-weight:bold">
+    <input type="checkbox"> ${f.label}<span class="changed" data-changed="${f.key}"></span></label>`;
+  const cb = row.querySelector('input');
+  cb.checked = !!values[f.key];
+  cb.onchange = () => { values[f.key] = cb.checked; persist(); };
+  return row;
+}
+
+function render() {
+  const form = $('form');
+  form.innerHTML = '';
+  for (const f of C.FIELDS) {
+    form.appendChild(f.type === 'types' ? typesRow(f) : f.type === 'bool' ? boolRow(f) : numberRow(f));
+  }
+  markChanged();
+}
+
+$('defaults').onclick = () => {
+  C.clear();
+  values = C.defaults();
+  render();
+  $('status').className = 'status';
+  $('status').textContent = '既定値に戻しました';
+};
+
+// 別のタブで設定が変わったら表示を合わせる
+addEventListener('storage', e => {
+  if (e.key !== C.KEY && e.key !== null) return;
+  values = Object.assign(C.defaults(), C.loadSaved());
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
